@@ -411,6 +411,7 @@ pub fn createLinearModel(allocator: std.mem.Allocator, input_size: usize, hidden
 }
 
 pub fn createTransformerBlock(allocator: std.mem.Allocator, d_model: usize, n_heads: usize) !*NenMLFlow {
+    _ = n_heads; // TODO: Implement multi-head attention
     const flow = try NenMLFlow.init(allocator);
     
     // Multi-head attention
@@ -429,26 +430,26 @@ pub fn createTransformerBlock(allocator: std.mem.Allocator, d_model: usize, n_he
 }
 
 // Export for C bindings
-export fn nenml_create_flow(allocator: *anyopaque) *anyopaque {
-    const alloc = @ptrCast(std.mem.Allocator, allocator);
+pub export fn nenml_create_flow(allocator: *anyopaque) *anyopaque {
+    const alloc = @ptrCast(*std.mem.Allocator, allocator);
     const flow = NenMLFlow.init(alloc) catch return null;
     return flow;
 }
 
-export fn nenml_add_node(flow: *anyopaque, node: *anyopaque) c_int {
+pub export fn nenml_add_node(flow: *anyopaque, node: *anyopaque) c_int {
     const f = @ptrCast(*NenMLFlow, flow);
     const n = @ptrCast(*MLNode, node);
     f.addNode(n) catch return -1;
     return 0;
 }
 
-export fn nenml_execute_flow(flow: *anyopaque) c_int {
+pub export fn nenml_execute_flow(flow: *anyopaque) c_int {
     const f = @ptrCast(*NenMLFlow, flow);
     f.execute() catch return -1;
     return 0;
 }
 
-export fn nenml_get_flow_stats(flow: *anyopaque) *anyopaque {
+pub export fn nenml_get_flow_stats(flow: *anyopaque) *anyopaque {
     const f = @ptrCast(*NenMLFlow, flow);
     const stats = f.getStats();
     return &stats;

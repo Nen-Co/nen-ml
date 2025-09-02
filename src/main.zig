@@ -42,7 +42,6 @@ fn demoTensorOperations() !void {
     });
     
     // Element-wise operations
-    const zeros = nen_ml.Tensor.zeros(shape, .f32);
     const ones = nen_ml.Tensor.ones(shape, .f32);
     
     const sum = try tensor.add(ones);
@@ -96,9 +95,9 @@ fn demoNeuralNetworkLayers() !void {
     const gelu = nen_ml.Activation.gelu;
     const silu = nen_ml.Activation.silu;
     
-    const relu_output = relu.forward(linear_output);
-    const gelu_output = gelu.forward(linear_output);
-    const silu_output = silu.forward(linear_output);
+    _ = relu.forward(linear_output);
+    _ = gelu.forward(linear_output);
+    _ = silu.forward(linear_output);
     
     log.info("Activation functions: relu, gelu, silu applied", .{});
     
@@ -114,7 +113,7 @@ fn demoNeuralNetworkLayers() !void {
     
     // Dropout
     const dropout = nen_ml.Dropout.init(0.1);
-    const dropout_output = dropout.forward(norm_output);
+    _ = dropout.forward(norm_output);
     
     log.info("Dropout: rate=0.1 applied", .{});
     

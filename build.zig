@@ -14,6 +14,13 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
+    // NenML module for other projects
+    const nen_ml_mod = b.addModule("nen_ml", .{
+        .root_source_file = .{ .cwd_relative = "src/lib.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Main executable
     const exe = b.addExecutable(.{
         .name = "nen-ml",
@@ -22,7 +29,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.addModule("nen_ml", lib);
+    exe.root_module.addImport("nen_ml", nen_ml_mod);
 
     b.installArtifact(exe);
 
@@ -46,7 +53,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    tensor_example.addModule("nen_ml", lib);
+    tensor_example.root_module.addImport("nen_ml", nen_ml_mod);
 
     const run_tensor_example = b.addRunArtifact(tensor_example);
 
@@ -60,7 +67,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    nn_example.addModule("nen_ml", lib);
+    nn_example.root_module.addImport("nen_ml", nen_ml_mod);
 
     const run_nn_example = b.addRunArtifact(nn_example);
 
@@ -74,7 +81,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    workflow_example.addModule("nen_ml", lib);
+    workflow_example.root_module.addImport("nen_ml", nen_ml_mod);
 
     const run_workflow_example = b.addRunArtifact(workflow_example);
 

@@ -355,7 +355,7 @@ pub const TokenEmbedding = struct {
                 else
                     indices.data[idx];
                 
-                const token_id_usize = @intCast(usize, @abs(token_id));
+                const token_id_usize = @as(usize, @intCast(@abs(token_id)));
                 
                 // Copy embedding vector
                 for (0..embedding_dim) |d| {

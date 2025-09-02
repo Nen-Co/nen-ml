@@ -53,7 +53,7 @@ pub const Shape = struct {
         return shape;
     }
     
-    pub inline fn rank(self: Shape) u8 {
+    pub inline fn getRank(self: Shape) u8 {
         return self.rank;
     }
     
@@ -213,7 +213,7 @@ pub const Tensor = struct {
         const k = self.shape.getDim(1);
         const n = other.shape.getDim(1);
         
-        var result_shape = Shape.init(&.{ m, n });
+        const result_shape = Shape.init(&.{ m, n });
         var result = Tensor.init(result_shape, self.dtype);
         
         // Simple matrix multiplication
@@ -282,9 +282,9 @@ pub const Tensor = struct {
     // Utility functions
     pub inline fn zeros(shape: Shape, dtype: DataType) Tensor {
         var tensor = Tensor.init(shape, dtype);
-        const size = shape.totalElements() * dtype.size();
-        std.mem.set(u8, tensor.data[0..size], 0);
-        tensor.data_len = size;
+        const tensor_size = shape.totalElements() * dtype.size();
+        std.mem.set(u8, tensor.data[0..tensor_size], 0);
+        tensor.data_len = tensor_size;
         return tensor;
     }
     
