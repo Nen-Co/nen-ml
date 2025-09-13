@@ -11,7 +11,7 @@ pub const DataType = enum {
     i64,
     u8,
     bool,
-    
+
     pub inline fn size(self: DataType) usize {
         return switch (self) {
             .f32 => 4,
@@ -22,14 +22,14 @@ pub const DataType = enum {
             .bool => 1,
         };
     }
-    
+
     pub inline fn isFloat(self: DataType) bool {
         return switch (self) {
             .f32, .f16 => true,
             else => false,
         };
     }
-    
+
     pub inline fn isInteger(self: DataType) bool {
         return switch (self) {
             .i32, .i64, .u8 => true,
@@ -42,7 +42,7 @@ pub const DataType = enum {
 pub const Shape = struct {
     dims: [8]usize, // Max 8 dimensions
     rank: u8,
-    
+
     pub inline fn init(dims: []const usize) Shape {
         var shape = Shape{ .dims = undefined, .rank = 0 };
         const rank = @min(dims.len, 8);
@@ -52,11 +52,11 @@ pub const Shape = struct {
         }
         return shape;
     }
-    
+
     pub inline fn getRank(self: Shape) u8 {
         return self.rank;
     }
-    
+
     pub inline fn totalElements(self: Shape) usize {
         var total: usize = 1;
         for (0..self.rank) |i| {
@@ -64,14 +64,14 @@ pub const Shape = struct {
         }
         return total;
     }
-    
+
     pub inline fn getDim(self: Shape, index: u8) usize {
         if (index < self.rank) {
             return self.dims[index];
         }
         return 0;
     }
-    
+
     pub inline fn isCompatible(self: Shape, other: Shape) bool {
         if (self.rank != other.rank) return false;
         for (0..self.rank) |i| {
@@ -87,7 +87,7 @@ pub const Tensor = struct {
     data_len: usize,
     shape: Shape,
     dtype: DataType,
-    
+
     pub inline fn init(shape: Shape, dtype: DataType) Tensor {
         return Tensor{
             .data = undefined,
@@ -96,7 +96,7 @@ pub const Tensor = struct {
             .dtype = dtype,
         };
     }
-    
+
     pub inline fn setData(self: *Tensor, new_data: []const u8) error{DataTooLarge}!void {
         const required_size = self.shape.totalElements() * self.dtype.size();
         if (required_size > self.data.len) {
@@ -105,101 +105,107 @@ pub const Tensor = struct {
         if (new_data.len > self.data.len) {
             return error.DataTooLarge;
         }
-        std.mem.copy(u8, &self.data, new_data);
+        @memcpy(self.data[0..new_data.len], new_data);
         self.data_len = new_data.len;
     }
-    
+
     pub inline fn getData(self: Tensor) []const u8 {
         return self.data[0..self.data_len];
     }
-    
+
     pub inline fn getShape(self: Tensor) Shape {
         return self.shape;
     }
-    
+
     pub inline fn getDtype(self: Tensor) DataType {
         return self.dtype;
     }
-    
+
     pub inline fn totalElements(self: Tensor) usize {
         return self.shape.totalElements();
     }
-    
+
     pub inline fn size(self: Tensor) usize {
         return self.totalElements() * self.dtype.size();
     }
-    
+
     // Element-wise operations
-    pub inline fn add(self: Tensor, other: Tensor) error{IncompatibleShapes}!Tensor {
+    pub inline fn add(self: Tensor, other: Tensor) error{ IncompatibleShapes, IncompatibleTypes, UnsupportedOperation }!Tensor {
         if (!self.shape.isCompatible(other.shape)) {
             return error.IncompatibleShapes;
         }
         if (self.dtype != other.dtype) {
             return error.IncompatibleTypes;
         }
-        
+
         var result = Tensor.init(self.shape, self.dtype);
         const data_size = self.dtype.size();
         const elements = self.totalElements();
-        
+
         for (0..elements) |i| {
             const offset = i * data_size;
             switch (self.dtype) {
                 .f32 => {
-                    const a = std.mem.readIntLittle(f32, self.data[offset..][0..4]);
-                    const b = std.mem.readIntLittle(f32, other.data[offset..][0..4]);
-                    const sum = a + b;
-                    std.mem.writeIntLittle(f32, result.data[offset..][0..4], sum);
+                    const a_bytes = self.data[offset..][0..4];
+                    const b_bytes = other.data[offset..][0..4];
+                    const a: f32 = @bitCast(std.mem.bytesAsValue(u32, a_bytes).*);
+                    const b: f32 = @bitCast(std.mem.bytesAsValue(u32, b_bytes).*);
+                    const sum: f32 = a + b;
+                    const sum_u32: u32 = @bitCast(sum);
+                    std.mem.bytesAsValue(u32, result.data[offset..][0..4]).* = sum_u32;
                 },
                 .i32 => {
-                    const a = std.mem.readIntLittle(i32, self.data[offset..][0..4]);
-                    const b = std.mem.readIntLittle(i32, other.data[offset..][0..4]);
-                    const sum = a + b;
-                    std.mem.writeIntLittle(i32, result.data[offset..][0..4], sum);
+                    const a = std.mem.bytesAsValue(i32, self.data[offset..][0..4]).*;
+                    const b = std.mem.bytesAsValue(i32, other.data[offset..][0..4]).*;
+                    const sum: i32 = a + b;
+                    std.mem.bytesAsValue(i32, result.data[offset..][0..4]).* = sum;
                 },
                 else => return error.UnsupportedOperation,
             }
         }
-        
+
         result.data_len = self.data_len;
         return result;
     }
-    
-    pub inline fn multiply(self: Tensor, other: Tensor) error{IncompatibleShapes}!Tensor {
+
+    pub inline fn multiply(self: Tensor, other: Tensor) error{ IncompatibleShapes, IncompatibleTypes, UnsupportedOperation }!Tensor {
         if (!self.shape.isCompatible(other.shape)) {
             return error.IncompatibleShapes;
         }
         if (self.dtype != other.dtype) {
             return error.IncompatibleTypes;
         }
-        
+
         var result = Tensor.init(self.shape, self.dtype);
         const data_size = self.dtype.size();
         const elements = self.totalElements();
-        
+
         for (0..elements) |i| {
             const offset = i * data_size;
             switch (self.dtype) {
                 .f32 => {
-                    const a = std.mem.readIntLittle(f32, self.data[offset..][0..4]);
-                    const b = std.mem.readIntLittle(f32, other.data[offset..][0..4]);
-                    const product = a * b;
-                    std.mem.writeIntLittle(f32, result.data[offset..][0..4], product);
+                    const a_bytes = self.data[offset..][0..4];
+                    const b_bytes = other.data[offset..][0..4];
+                    const a: f32 = @bitCast(std.mem.bytesAsValue(u32, a_bytes).*);
+                    const b: f32 = @bitCast(std.mem.bytesAsValue(u32, b_bytes).*);
+                    const product: f32 = a * b;
+                    const product_u32: u32 = @bitCast(product);
+                    std.mem.bytesAsValue(u32, result.data[offset..][0..4]).* = product_u32;
                 },
                 .i32 => {
-                    const a = std.mem.readIntLittle(i32, self.data[offset..][0..4]);
-                    const b = std.mem.readIntLittle(i32, other.data[offset..][0..4]);
-                    const product = a * b;
-                    std.mem.writeIntLittle(i32, result.data[offset..][0..4], product);
+                    const a = std.mem.bytesAsValue(i32, self.data[offset..][0..4]).*;
+                    const b = std.mem.bytesAsValue(i32, other.data[offset..][0..4]).*;
+                    const product: i32 = a * b;
+                    std.mem.bytesAsValue(i32, result.data[offset..][0..4]).* = product;
                 },
                 else => return error.UnsupportedOperation,
             }
         }
-        
+
         result.data_len = self.data_len;
         return result;
     }
-    
+
     // Matrix operations
     pub inline fn matmul(self: Tensor, other: Tensor) error{InvalidMatrixShape}!Tensor {
         if (self.shape.rank != 2 or other.shape.rank != 2) {
@@ -208,14 +214,14 @@ pub const Tensor = struct {
         if (self.shape.getDim(1) != other.shape.getDim(0)) {
             return error.InvalidMatrixShape;
         }
-        
+
         const m = self.shape.getDim(0);
         const k = self.shape.getDim(1);
         const n = other.shape.getDim(1);
-        
+
         const result_shape = Shape.init(&.{ m, n });
         var result = Tensor.init(result_shape, self.dtype);
-        
+
         // Simple matrix multiplication
         for (0..m) |i| {
             for (0..n) |j| {
@@ -223,114 +229,118 @@ pub const Tensor = struct {
                 for (0..k) |l| {
                     const a_idx = i * k + l;
                     const b_idx = l * n + j;
-                    const a = std.mem.readIntLittle(f32, self.data[a_idx * 4..][0..4]);
-                    const b = std.mem.readIntLittle(f32, other.data[b_idx * 4..][0..4]);
+                    const a_bytes = self.data[a_idx * 4 ..][0..4];
+                    const b_bytes = other.data[b_idx * 4 ..][0..4];
+                    const a: f32 = @bitCast(std.mem.bytesAsValue(u32, a_bytes).*);
+                    const b: f32 = @bitCast(std.mem.bytesAsValue(u32, b_bytes).*);
                     sum += a * b;
                 }
                 const result_idx = i * n + j;
-                std.mem.writeIntLittle(f32, result.data[result_idx * 4..][0..4], sum);
+                const sum_u32: u32 = @bitCast(sum);
+                std.mem.bytesAsValue(u32, result.data[result_idx * 4 ..][0..4]).* = sum_u32;
             }
         }
-        
+
         result.data_len = m * n * 4;
         return result;
     }
-    
+
     // Activation functions
     pub inline fn relu(self: Tensor) Tensor {
         var result = Tensor.init(self.shape, self.dtype);
         const data_size = self.dtype.size();
         const elements = self.totalElements();
-        
+
         for (0..elements) |i| {
             const offset = i * data_size;
-            switch (self.dtype) {
-                .f32 => {
-                    const x = std.mem.readIntLittle(f32, self.data[offset..][0..4]);
-                    const relu_x = if (x > 0) x else 0;
-                    std.mem.writeIntLittle(f32, result.data[offset..][0..4], relu_x);
-                },
-                else => return error.UnsupportedOperation,
+            if (self.dtype == .f32) {
+                const x_bytes = self.data[offset..][0..4];
+                const x: f32 = @bitCast(std.mem.bytesAsValue(u32, x_bytes).*);
+                const relu_x: f32 = if (x > 0) x else 0;
+                const relu_u32: u32 = @bitCast(relu_x);
+                std.mem.bytesAsValue(u32, result.data[offset..][0..4]).* = relu_u32;
             }
         }
-        
+
         result.data_len = self.data_len;
         return result;
     }
-    
+
     pub inline fn sigmoid(self: Tensor) Tensor {
         var result = Tensor.init(self.shape, self.dtype);
         const data_size = self.dtype.size();
         const elements = self.totalElements();
-        
+
         for (0..elements) |i| {
             const offset = i * data_size;
-            switch (self.dtype) {
-                .f32 => {
-                    const x = std.mem.readIntLittle(f32, self.data[offset..][0..4]);
-                    const sigmoid_x = 1.0 / (1.0 + std.math.exp(-x));
-                    std.mem.writeIntLittle(f32, result.data[offset..][0..4], sigmoid_x);
-                },
-                else => return error.UnsupportedOperation,
+            if (self.dtype == .f32) {
+                const x_bytes = self.data[offset..][0..4];
+                const x: f32 = @bitCast(std.mem.bytesAsValue(u32, x_bytes).*);
+                const sigmoid_x: f32 = 1.0 / (1.0 + std.math.exp(-x));
+                const sig_u32: u32 = @bitCast(sigmoid_x);
+                std.mem.bytesAsValue(u32, result.data[offset..][0..4]).* = sig_u32;
             }
         }
-        
+
         result.data_len = self.data_len;
         return result;
     }
-    
+
     // Utility functions
     pub inline fn zeros(shape: Shape, dtype: DataType) Tensor {
         var tensor = Tensor.init(shape, dtype);
         const tensor_size = shape.totalElements() * dtype.size();
-        std.mem.set(u8, tensor.data[0..tensor_size], 0);
+        @memset(tensor.data[0..tensor_size], 0);
         tensor.data_len = tensor_size;
         return tensor;
     }
-    
+
     pub inline fn ones(shape: Shape, dtype: DataType) Tensor {
         var tensor = Tensor.init(shape, dtype);
         const elements = shape.totalElements();
         const data_size = dtype.size();
-        
+
         for (0..elements) |i| {
             const offset = i * data_size;
             switch (dtype) {
                 .f32 => {
-                    std.mem.writeIntLittle(f32, tensor.data[offset..][0..4], 1.0);
+                    const one_u32: u32 = @bitCast(@as(f32, 1.0));
+                    std.mem.bytesAsValue(u32, tensor.data[offset..][0..4]).* = one_u32;
                 },
                 .i32 => {
-                    std.mem.writeIntLittle(i32, tensor.data[offset..][0..4], 1);
+                    std.mem.bytesAsValue(i32, tensor.data[offset..][0..4]).* = 1;
                 },
                 else => {},
             }
         }
-        
+
         tensor.data_len = elements * data_size;
         return tensor;
     }
-    
+
     pub inline fn random(shape: Shape, dtype: DataType, seed: u64) Tensor {
         var tensor = Tensor.init(shape, dtype);
-        var rng = std.rand.Xoshiro256.init(seed);
+        var prng = std.Random.DefaultPrng.init(seed);
+        const rng = prng.random();
         const elements = shape.totalElements();
         const data_size = dtype.size();
-        
+
         for (0..elements) |i| {
             const offset = i * data_size;
             switch (dtype) {
                 .f32 => {
-                    const value = rng.random().float(f32);
-                    std.mem.writeIntLittle(f32, tensor.data[offset..][0..4], value);
+                    const value = rng.float(f32);
+                    const v_u32: u32 = @bitCast(value);
+                    std.mem.bytesAsValue(u32, tensor.data[offset..][0..4]).* = v_u32;
                 },
                 .i32 => {
-                    const value = rng.random().int(i32);
-                    std.mem.writeIntLittle(i32, tensor.data[offset..][0..4], value);
+                    const value = rng.int(i32);
+                    std.mem.bytesAsValue(i32, tensor.data[offset..][0..4]).* = value;
                 },
                 else => {},
             }
         }
-        
+
         tensor.data_len = elements * data_size;
         return tensor;
     }
@@ -340,14 +350,14 @@ pub const Tensor = struct {
 pub const TensorPool = struct {
     tensors: [16]Tensor, // Pool of 16 tensors
     used: [16]bool,
-    
+
     pub inline fn init() TensorPool {
         return TensorPool{
             .tensors = undefined,
             .used = [_]bool{false} ** 16,
         };
     }
-    
+
     pub inline fn allocate(self: *TensorPool, shape: Shape, dtype: DataType) ?*Tensor {
         for (0..16) |i| {
             if (!self.used[i]) {
@@ -358,7 +368,7 @@ pub const TensorPool = struct {
         }
         return null; // Pool full
     }
-    
+
     pub inline fn deallocate(self: *TensorPool, tensor: *Tensor) void {
         for (0..16) |i| {
             if (&self.tensors[i] == tensor) {
@@ -367,7 +377,7 @@ pub const TensorPool = struct {
             }
         }
     }
-    
+
     pub inline fn getAvailableCount(self: TensorPool) usize {
         var count: usize = 0;
         for (self.used) |used| {
@@ -381,7 +391,7 @@ pub const TensorPool = struct {
 test "tensor basics" {
     const shape = Shape.init(&.{ 2, 3 });
     const tensor = Tensor.init(shape, .f32);
-    
+
     try std.testing.expectEqual(@as(u8, 2), tensor.shape.rank);
     try std.testing.expectEqual(@as(usize, 6), tensor.totalElements());
     try std.testing.expectEqual(@as(usize, 24), tensor.size());
@@ -389,17 +399,17 @@ test "tensor basics" {
 
 test "tensor operations" {
     const shape = Shape.init(&.{ 2, 2 });
-    
+
     // Create tensors with data
     var a = Tensor.init(shape, .f32);
     var b = Tensor.init(shape, .f32);
-    
+
     const a_data = [_]f32{ 1.0, 2.0, 3.0, 4.0 };
     const b_data = [_]f32{ 5.0, 6.0, 7.0, 8.0 };
-    
+
     try a.setData(std.mem.sliceAsBytes(&a_data));
     try b.setData(std.mem.sliceAsBytes(&b_data));
-    
+
     // Test addition
     const sum = try a.add(b);
     const sum_data = std.mem.bytesAsSlice(f32, sum.getData());
@@ -412,15 +422,15 @@ test "tensor operations" {
 test "tensor pool" {
     var pool = TensorPool.init();
     const shape = Shape.init(&.{ 2, 2 });
-    
+
     // Allocate tensors
     const tensor1 = pool.allocate(shape, .f32);
     const tensor2 = pool.allocate(shape, .f32);
-    
+
     try std.testing.expect(tensor1 != null);
     try std.testing.expect(tensor2 != null);
     try std.testing.expectEqual(@as(usize, 14), pool.getAvailableCount());
-    
+
     // Deallocate
     if (tensor1) |t| pool.deallocate(t);
     try std.testing.expectEqual(@as(usize, 15), pool.getAvailableCount());
